@@ -5,9 +5,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { WebClient } from "@slack/web-api";
+import { WebClient, ErrorCode } from "@slack/web-api";
 import Fuse from "fuse.js";
-import slackifyMarkdown from 'slackify-markdown';
+import slackifyMarkdown from "slackify-markdown";
 
 // Schema definitions for all tools
 const ListChannelsSchema = z.object({});
@@ -16,14 +16,31 @@ const SearchChannelsSchema = z.object({
   query: z.string().describe("The search query for channels"),
 });
 
+const AddUserToChannelSchema = z.object({
+  channelId: z.string().describe("The ID of the channel to add the user to"),
+  userId: z.string().describe("The ID of the user to add to the channel"),
+});
+
 const GetChannelHistorySchema = z.object({
-  channelId: z.string().describe("The ID of the channel to get the history for"),
-  limit: z.number().optional().default(10).describe("The number of messages to return"),
+  channelId: z
+    .string()
+    .describe("The ID of the channel to get the history for"),
+  limit: z
+    .number()
+    .optional()
+    .default(10)
+    .describe("The number of messages to return"),
 });
 
 const GetChannelHistoryByTimeSchema = z.object({
-  channelId: z.string().describe("The ID of the channel to get the history for"),
-  limit: z.number().optional().default(10).describe("The maximum number of messages to return"),
+  channelId: z
+    .string()
+    .describe("The ID of the channel to get the history for"),
+  limit: z
+    .number()
+    .optional()
+    .default(10)
+    .describe("The maximum number of messages to return"),
   start: z.string().describe("The start time in RFC 3339 format"),
   end: z.string().describe("The end time in RFC 3339 format"),
 });
@@ -31,21 +48,37 @@ const GetChannelHistoryByTimeSchema = z.object({
 const GetThreadHistorySchema = z.object({
   channelId: z.string().describe("The ID of the channel containing the thread"),
   threadId: z.string().describe("The ID of the thread to get the history for"),
-  limit: z.number().optional().default(10).describe("The number of messages to return"),
+  limit: z
+    .number()
+    .optional()
+    .default(10)
+    .describe("The number of messages to return"),
 });
 
 const GetThreadHistoryFromLinkSchema = z.object({
-  messageLink: z.string().describe("The link to the first Slack message in the thread"),
-  limit: z.number().optional().default(10).describe("The number of messages to return"),
+  messageLink: z
+    .string()
+    .describe("The link to the first Slack message in the thread"),
+  limit: z
+    .number()
+    .optional()
+    .default(10)
+    .describe("The number of messages to return"),
 });
 
 const SearchMessagesSchema = z.object({
   query: z.string().describe("The search query"),
-  sortByTime: z.boolean().optional().default(false).describe("Sort by timestamp rather than score"),
+  sortByTime: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("Sort by timestamp rather than score"),
 });
 
 const SendMessageSchema = z.object({
-  channelId: z.string().describe("The ID of the channel to send the message to"),
+  channelId: z
+    .string()
+    .describe("The ID of the channel to send the message to"),
   text: z.string().describe("The text to send"),
 });
 
@@ -62,38 +95,65 @@ const SearchUsersSchema = z.object({
 });
 
 const SendDMSchema = z.object({
-  userIds: z.string().describe("Comma-separated list of user IDs to send the message to"),
+  userIds: z
+    .string()
+    .describe("Comma-separated list of user IDs to send the message to"),
   text: z.string().describe("The text to send"),
 });
 
 const SendDMInThreadSchema = z.object({
-  userIds: z.string().describe("Comma-separated list of user IDs for the conversation"),
+  userIds: z
+    .string()
+    .describe("Comma-separated list of user IDs for the conversation"),
   threadId: z.string().describe("The ID of the thread to send the message to"),
   text: z.string().describe("The text to send"),
 });
 
 const GetMessageLinkSchema = z.object({
-  channelId: z.string().describe("The ID of the channel containing the message"),
+  channelId: z
+    .string()
+    .describe("The ID of the channel containing the message"),
   messageId: z.string().describe("The ID of the message"),
 });
 
 const GetDMHistorySchema = z.object({
-  userIds: z.string().describe("Comma-separated list of user IDs for the conversation"),
-  limit: z.number().optional().default(10).describe("The number of messages to return"),
+  userIds: z
+    .string()
+    .describe("Comma-separated list of user IDs for the conversation"),
+  limit: z
+    .number()
+    .optional()
+    .default(10)
+    .describe("The number of messages to return"),
 });
 
 const GetDMThreadHistorySchema = z.object({
-  userIds: z.string().describe("Comma-separated list of user IDs for the conversation"),
+  userIds: z
+    .string()
+    .describe("Comma-separated list of user IDs for the conversation"),
   threadId: z.string().describe("The ID of the thread to get the history for"),
-  limit: z.number().optional().default(10).describe("The number of messages to return"),
+  limit: z
+    .number()
+    .optional()
+    .default(10)
+    .describe("The number of messages to return"),
 });
 
 const UserContextSchema = z.object({});
 
 const SendTypingEventSchema = z.object({
-  channelId: z.string().describe("The ID of the channel to send the typing event to"),
-  threadId: z.string().optional().describe("The ID of the thread to send the typing event to"),
-  status: z.string().describe("The status to set the typing event that shows in the slack thread"),
+  channelId: z
+    .string()
+    .describe("The ID of the channel to send the typing event to"),
+  threadId: z
+    .string()
+    .optional()
+    .describe("The ID of the thread to send the typing event to"),
+  status: z
+    .string()
+    .describe(
+      "The status to set the typing event that shows in the slack thread",
+    ),
 });
 
 class SlackClient {
@@ -105,7 +165,9 @@ class SlackClient {
 
   async userContext() {
     const result = await this.webClient.auth.test({});
-    const userResult = await this.webClient.users.info({ user: result.user_id! });
+    const userResult = await this.webClient.users.info({
+      user: result.user_id!,
+    });
     return {
       name: userResult.user?.name || "",
       realName: userResult.user?.profile?.real_name || "",
@@ -141,6 +203,17 @@ class SlackClient {
     return fuse.search(query).map((result) => result.item);
   }
 
+  async addUserToChannel(channelId: string, userId: string) {
+    // The Slack SDK will always throw an error instead of a partial response for failed requests
+    // since we're adding a single user at a time.
+    // We don't bother returning the response object here, since if the call doesn't return
+    // an error, we know the user was added successfully.
+    await this.webClient.conversations.invite({
+      channel: channelId,
+      users: userId,
+    });
+  }
+
   async getChannelHistory(channelId: string, limit: number = 10) {
     const history = await this.webClient.conversations.history({
       channel: channelId,
@@ -149,7 +222,12 @@ class SlackClient {
     return history.messages ?? [];
   }
 
-  async getChannelHistoryByTime(channelId: string, limit: number, start: string, end: string) {
+  async getChannelHistoryByTime(
+    channelId: string,
+    limit: number,
+    start: string,
+    end: string,
+  ) {
     const oldest = new Date(start).getTime() / 1000;
     const latest = new Date(end).getTime() / 1000;
     const history = await this.webClient.conversations.history({
@@ -161,7 +239,11 @@ class SlackClient {
     return history.messages ?? [];
   }
 
-  async getThreadHistory(channelId: string, threadId: string, limit: number = 10) {
+  async getThreadHistory(
+    channelId: string,
+    threadId: string,
+    limit: number = 10,
+  ) {
     const replies = await this.webClient.conversations.replies({
       channel: channelId,
       ts: threadId,
@@ -194,25 +276,25 @@ class SlackClient {
     // This function removes the bold markers from headings to help the parser to return the correct text
     // without this , # Welcome to *Markdown* → Slack **Test** --> *Welcome to ​_Markdown_​ → Slack *Test** , which is incorrect.
     return markdownText
-      .split('\n')
-      .map(line => {
+      .split("\n")
+      .map((line) => {
         const headingMatch = line.match(/^(\s{0,3}#+\s)(.*)$/);
         if (headingMatch) {
           const prefix = headingMatch[1]; // "# ", "## ", etc.
           let content = headingMatch[2];
-          content = content.replace(/\*\*(.+?)\*\*/g, '$1');
-          content = content.replace(/__(.+?)__/g, '$1');
+          content = content.replace(/\*\*(.+?)\*\*/g, "$1");
+          content = content.replace(/__(.+?)__/g, "$1");
           return prefix + content;
         }
         return line;
       })
-      .join('\n');
+      .join("\n");
   }
-  
+
   markdownToSlack(text: string) {
-    // Convert markdown format text to slack format text. 
-    text = this.removeBoldInHeadings(text)
-    return slackifyMarkdown(text)
+    // Convert markdown format text to slack format text.
+    text = this.removeBoldInHeadings(text);
+    return slackifyMarkdown(text);
   }
 
   async sendMessage(channelId: string, text: string) {
@@ -318,7 +400,11 @@ class SlackClient {
     return history.messages ?? [];
   }
 
-  async getDMThreadHistory(userIds: string, threadId: string, limit: number = 10) {
+  async getDMThreadHistory(
+    userIds: string,
+    threadId: string,
+    limit: number = 10,
+  ) {
     const userIdArray = userIds.split(",").map((id) => id.trim());
     const result = await this.webClient.conversations.open({
       users: userIdArray.join(","),
@@ -341,7 +427,7 @@ class SlackClient {
       thread_ts: threadId || "",
       channel_id: channelId,
       status: status || "is typing...",
-    })
+    });
   }
 }
 
@@ -356,7 +442,7 @@ function createMcpServer(slackClient: SlackClient, token: string): McpServer {
       capabilities: {
         tools: {},
       },
-    }
+    },
   );
 
   const isBotToken = token.startsWith("xoxb-");
@@ -370,7 +456,7 @@ function createMcpServer(slackClient: SlackClient, token: string): McpServer {
       return {
         content: [{ type: "text", text: JSON.stringify(channels, null, 2) }],
       };
-    }
+    },
   );
 
   server.tool(
@@ -382,55 +468,108 @@ function createMcpServer(slackClient: SlackClient, token: string): McpServer {
       return {
         content: [{ type: "text", text: JSON.stringify(channels, null, 2) }],
       };
-    }
+    },
+  );
+
+  server.tool(
+    "add_user_to_channel",
+    "Add a user to a channel in the Slack workspace",
+    AddUserToChannelSchema.shape,
+    async (
+      { channelId, userId },
+      { sendNotification },
+    ): Promise<CallToolResult> => {
+      try {
+        await slackClient.addUserToChannel(channelId, userId);
+      } catch (error) {
+        // Rethrow errors, ignoring already_in_channel to make this tool idempotent.
+        if ((error as any)?.data?.error !== "already_in_channel") {
+          throw error;
+        }
+      }
+
+      // Invite was successful or the user was already invited to the channel
+      return {
+        content: [
+          {
+            type: "text",
+            text: `User ${userId} added to channel ${channelId}`,
+          },
+        ],
+      };
+    },
   );
 
   server.tool(
     "get_channel_history",
     "Get the chat history for a channel in the Slack workspace",
     GetChannelHistorySchema.shape,
-    async ({ channelId, limit }, { sendNotification }): Promise<CallToolResult> => {
+    async (
+      { channelId, limit },
+      { sendNotification },
+    ): Promise<CallToolResult> => {
       const messages = await slackClient.getChannelHistory(channelId, limit);
       return {
         content: [{ type: "text", text: JSON.stringify(messages, null, 2) }],
       };
-    }
+    },
   );
 
   server.tool(
     "get_channel_history_by_time",
     "Get the chat history for a channel in the Slack workspace within a specific time range",
     GetChannelHistoryByTimeSchema.shape,
-    async ({ channelId, limit, start, end }, { sendNotification }): Promise<CallToolResult> => {
-      const messages = await slackClient.getChannelHistoryByTime(channelId, limit, start, end);
+    async (
+      { channelId, limit, start, end },
+      { sendNotification },
+    ): Promise<CallToolResult> => {
+      const messages = await slackClient.getChannelHistoryByTime(
+        channelId,
+        limit,
+        start,
+        end,
+      );
       return {
         content: [{ type: "text", text: JSON.stringify(messages, null, 2) }],
       };
-    }
+    },
   );
 
   server.tool(
     "get_thread_history",
     "Get the chat history for a particular thread",
     GetThreadHistorySchema.shape,
-    async ({ channelId, threadId, limit }, { sendNotification }): Promise<CallToolResult> => {
-      const messages = await slackClient.getThreadHistory(channelId, threadId, limit);
+    async (
+      { channelId, threadId, limit },
+      { sendNotification },
+    ): Promise<CallToolResult> => {
+      const messages = await slackClient.getThreadHistory(
+        channelId,
+        threadId,
+        limit,
+      );
       return {
         content: [{ type: "text", text: JSON.stringify(messages, null, 2) }],
       };
-    }
+    },
   );
 
   server.tool(
     "get_thread_history_from_link",
     "Get the chat history for a particular thread from a Slack message link",
     GetThreadHistoryFromLinkSchema.shape,
-    async ({ messageLink, limit }, { sendNotification }): Promise<CallToolResult> => {
-      const messages = await slackClient.getThreadHistoryFromLink(messageLink, limit);
+    async (
+      { messageLink, limit },
+      { sendNotification },
+    ): Promise<CallToolResult> => {
+      const messages = await slackClient.getThreadHistoryFromLink(
+        messageLink,
+        limit,
+      );
       return {
         content: [{ type: "text", text: JSON.stringify(messages, null, 2) }],
       };
-    }
+    },
   );
 
   if (!isBotToken) {
@@ -438,35 +577,48 @@ function createMcpServer(slackClient: SlackClient, token: string): McpServer {
       "search_messages",
       "Search for messages in the Slack workspace",
       SearchMessagesSchema.shape,
-      async ({ query, sortByTime }, { sendNotification }): Promise<CallToolResult> => {
+      async (
+        { query, sortByTime },
+        { sendNotification },
+      ): Promise<CallToolResult> => {
         const messages = await slackClient.searchMessages(query, sortByTime);
         return {
           content: [{ type: "text", text: JSON.stringify(messages, null, 2) }],
         };
-      }
+      },
     );
     server.tool(
       "get_dm_history",
       "Get the chat history for a direct message conversation",
       GetDMHistorySchema.shape,
-      async ({ userIds, limit }, { sendNotification }): Promise<CallToolResult> => {
+      async (
+        { userIds, limit },
+        { sendNotification },
+      ): Promise<CallToolResult> => {
         const messages = await slackClient.getDMHistory(userIds, limit);
         return {
           content: [{ type: "text", text: JSON.stringify(messages, null, 2) }],
         };
-      }
+      },
     );
-  
+
     server.tool(
       "get_dm_thread_history",
       "Get the chat history for a thread in a direct message conversation",
       GetDMThreadHistorySchema.shape,
-      async ({ userIds, threadId, limit }, { sendNotification }): Promise<CallToolResult> => {
-        const messages = await slackClient.getDMThreadHistory(userIds, threadId, limit);
+      async (
+        { userIds, threadId, limit },
+        { sendNotification },
+      ): Promise<CallToolResult> => {
+        const messages = await slackClient.getDMThreadHistory(
+          userIds,
+          threadId,
+          limit,
+        );
         return {
           content: [{ type: "text", text: JSON.stringify(messages, null, 2) }],
         };
-      }
+      },
     );
   }
 
@@ -474,24 +626,34 @@ function createMcpServer(slackClient: SlackClient, token: string): McpServer {
     "send_message",
     "Send a message to a channel in the Slack workspace",
     SendMessageSchema.shape,
-    async ({ channelId, text }, { sendNotification }): Promise<CallToolResult> => {
+    async (
+      { channelId, text },
+      { sendNotification },
+    ): Promise<CallToolResult> => {
       const result = await slackClient.sendMessage(channelId, text);
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
-    }
+    },
   );
 
   server.tool(
     "send_message_in_thread",
     "Send a message in a thread in the Slack workspace",
     SendMessageInThreadSchema.shape,
-    async ({ channelId, threadId, text }, { sendNotification }): Promise<CallToolResult> => {
-      const result = await slackClient.sendMessageInThread(channelId, threadId, text);
+    async (
+      { channelId, threadId, text },
+      { sendNotification },
+    ): Promise<CallToolResult> => {
+      const result = await slackClient.sendMessageInThread(
+        channelId,
+        threadId,
+        text,
+      );
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
-    }
+    },
   );
 
   server.tool(
@@ -503,7 +665,7 @@ function createMcpServer(slackClient: SlackClient, token: string): McpServer {
       return {
         content: [{ type: "text", text: JSON.stringify(users, null, 2) }],
       };
-    }
+    },
   );
 
   server.tool(
@@ -515,43 +677,52 @@ function createMcpServer(slackClient: SlackClient, token: string): McpServer {
       return {
         content: [{ type: "text", text: JSON.stringify(users, null, 2) }],
       };
-    }
+    },
   );
 
   server.tool(
     "send_dm",
     "Send a direct message to a user",
     SendDMSchema.shape,
-    async ({ userIds, text }, { sendNotification }): Promise<CallToolResult> => {
+    async (
+      { userIds, text },
+      { sendNotification },
+    ): Promise<CallToolResult> => {
       const result = await slackClient.sendDM(userIds, text);
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
-    }
+    },
   );
 
   server.tool(
     "send_dm_in_thread",
     "Send a message in a thread in a direct message conversation",
     SendDMInThreadSchema.shape,
-    async ({ userIds, threadId, text }, { sendNotification }): Promise<CallToolResult> => {
+    async (
+      { userIds, threadId, text },
+      { sendNotification },
+    ): Promise<CallToolResult> => {
       const result = await slackClient.sendDMInThread(userIds, threadId, text);
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
-    }
+    },
   );
 
   server.tool(
     "get_message_link",
     "Get the permalink for a message",
     GetMessageLinkSchema.shape,
-    async ({ channelId, messageId }, { sendNotification }): Promise<CallToolResult> => {
+    async (
+      { channelId, messageId },
+      { sendNotification },
+    ): Promise<CallToolResult> => {
       const link = await slackClient.getMessageLink(channelId, messageId);
       return {
         content: [{ type: "text", text: JSON.stringify({ link }, null, 2) }],
       };
-    }
+    },
   );
 
   server.tool(
@@ -563,19 +734,22 @@ function createMcpServer(slackClient: SlackClient, token: string): McpServer {
       return {
         content: [{ type: "text", text: JSON.stringify(userInfo, null, 2) }],
       };
-    }
+    },
   );
 
   server.tool(
     "send_typing_event",
     "Send a typing event to a channel in the Slack workspace",
     SendTypingEventSchema.shape,
-    async ({ channelId, threadId, status }, { sendNotification }): Promise<CallToolResult> => {
+    async (
+      { channelId, threadId, status },
+      { sendNotification },
+    ): Promise<CallToolResult> => {
       await slackClient.sendTypingEvent(channelId, threadId, status);
       return {
         content: [{ type: "text", text: "Typing event sent" }],
       };
-    }
+    },
   );
 
   return server;
@@ -640,7 +814,7 @@ app.get("/mcp", async (req: Request, res: Response) => {
         message: "Method not allowed.",
       },
       id: null,
-    })
+    }),
   );
 });
 
@@ -654,14 +828,16 @@ app.delete("/mcp", async (req: Request, res: Response) => {
         message: "Method not allowed.",
       },
       id: null,
-    })
+    }),
   );
 });
 
 // Start the server
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 app.listen(PORT, () => {
-  console.log(`Slack MCP Stateless Streamable HTTP Server listening on port ${PORT}`);
+  console.log(
+    `Slack MCP Stateless Streamable HTTP Server listening on port ${PORT}`,
+  );
 });
 
 // Handle server shutdown
